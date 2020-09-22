@@ -16,58 +16,52 @@ from torch.utils.data import DataLoader
 from torch.utils.data import TensorDataset
 
 
-
 import matplotlib.pyplot as plt
-
 plt.close('all')
 
-def sine(x):
-    A0 = 1
-    # f0 = 0.01
-    phi0 = 0.2
-    x0 = 0 
-    
+##### Creating the data #####
+
+def sine(x, A0, f0, x0, phi0):
     y = A0 * np.sin( 2 * np.pi * f0 * (x - x0) + phi0)
     return y 
 
-def sine_gaussian(x):
-    B0 = 1
-    x1 = 500
-    tau0 = 300
-    # f1 = 0.01
-    phi1 = 0.2
-
-    y = B0*np.exp(-(x - x1)**2 / tau0**2) * np.cos( 2 * np.pi * f1 * (x - x1) + phi1)
+def sine_gaussian(x, B0, f0, x0, phi0, tau0):
+    y = B0 * np.exp(-(x - x0)**2 / tau0**2) * np.cos( 2 * np.pi * f0 * (x - x0) + phi0)
     return y 
+
+N_samples = 10
+Amp = np.random.uniform(0, 10, N_samples)
+Freq = np.random.uniform(0.009, 1.0, N_samples)
+Phase = np.random.uniform(0, 2*np.pi, N_samples)
+Tau = np.random.uniform(0.1, 10, 10)
+
+
+phi0 = 0.2
+x0 = 500
+tau0 = 300
 
 
 L = 1000
 x = np.arange(0, L, 1)
 
 N = 100
-freq_low = 0.01
-freq_high = 1.0
 
-freq = np.arange(0.009, 1.0, 0.01)
-amplitude = range(1,101)
+# freq = np.arange(0.009, 1.0, 0.01)
+# amplitude = range(1,101)
 
 dataset = []
-for f0 in freq:
-    y = sine(x)
-    dataset.append(y)
-    
-for A0 in amplitude:
-    y = sine(x)
-    dataset.append(y)
-    
-    
-for f1 in freq:
-    y = sine_gaussian(x)
-    dataset.append(y)
-    
-for B0 in amplitude:
-    y = sine_gaussian(x)
-    dataset.append(y)
+for f0 in Freq:
+    for A0 in Amp:
+        for phi0 in Phase:
+            y = sine(x, A0, f0, x0, phi0)
+            dataset.append(y)
+            
+for f0 in Freq:
+    for A0 in Amp:
+        for phi0 in Phase:
+            y = sine_gaussian(x, A0, f0, x0, phi0, tau0)
+            dataset.append(y)
+
     
 # plt.figure()
 # plt.plot(x, dataset[0], label= 'Sine')
@@ -79,12 +73,15 @@ for B0 in amplitude:
 # plt.legend()
 # plt.show()
 
+#%%
 
-
+dataset_size = np.shape(dataset)[0]
+N = int(dataset_size/2)
 
 #Adding labels: 0 for sine and 1 for gaussian sine
-labels = np.append(np.zeros(N),np.ones(N))
-labels = np.append(labels, labels)
+labels = np.append(np.zeros(N, dtype=int),np.ones(N, dtype=int))
+# labels = labels.astype(int)
+# labels = np.append(labels, labels)
 
 df = pd.DataFrame(dataset)
 df.insert(0, "label", labels) 
@@ -92,7 +89,7 @@ df.insert(0, "label", labels)
 # Shuffling the data
 df = df.sample(frac=1)
 
-test_size = 50
+test_size = 100
 df_test = df.iloc[:test_size,]
 df_train = df.iloc[(test_size+1):,]
 
@@ -101,15 +98,13 @@ df_train = df.iloc[(test_size+1):,]
 x_train = torch.tensor(df_train[[x for x in range(1,L)]].values, dtype = torch.float)
 x_test = torch.tensor(df_test[[x for x in range(1,L)]].values, dtype = torch.float)
 
-y_train = torch.tensor(df_train['label'].values, dtype = torch.float)
-y_test = torch.tensor(df_test['label'].values, dtype = torch.float)
+y_train = torch.tensor(df_train['label'].values, dtype = torch.int64)
+y_test = torch.tensor(df_test['label'].values, dtype = torch.int64)
 
 # Adding 1 dimension to x tensor s.t. shape(x)= [2N, 1, L]
 # Problem TO BE SOLVED: here channel = 1, cannnot change this value. 
 x_train = x_train.unsqueeze(1)
 x_test = x_test.unsqueeze(1)
-
-
 
 
 train_set = TensorDataset(x_train, y_train)
@@ -118,10 +113,15 @@ trainloader = DataLoader(train_set)
 test_set = TensorDataset(x_test, y_test)
 testloader = DataLoader(test_set)
 
+#%%
+
+
+##### Defining the CNN #####
+
 
 
 class Net1D(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, n0, n1, n2, kern):
         super(Net1D, self).__init__()
         self.conv1 = nn.Conv1d(n0,n1,kern)         
         self.pool = nn.MaxPool1d(2, 2)
@@ -135,7 +135,7 @@ class Net1D(torch.nn.Module):
 
         self.fc1 = nn.Linear(dim_x, 120)
         self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        self.fc3 = nn.Linear(84, 2)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -143,7 +143,7 @@ class Net1D(torch.nn.Module):
         x = x.view(-1, self.dim_x)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = F.softmax(self.fc3(x))
         return x
     
 
@@ -156,9 +156,12 @@ D_in =  L-1
 n0, n1, n2, kern = 1, 6, 16, 5
 
 
-net = Net1D()
+net = Net1D(1, 6, 16, 5)
+
+#%%
 
 
+##### Training & Testing  #####
 
 
 
@@ -166,22 +169,25 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 # Loss
-criterion = torch.nn.MSELoss(reduction='sum')
+criterion = torch.nn.CrossEntropyLoss()
 # Optimizer
 optimizer = torch.optim.SGD(net.parameters(), lr=1e-4)
 
-num_epochs = 100
+num_epochs = 10
 
 def train(net, trainloader):
     for epoch in range(num_epochs): # no. of epochs
         running_loss = 0
         for data in trainloader:
+            
             # data pixels and labels to GPU if available
             inputs, labels = data[0].to(device, non_blocking=True), data[1].to(device, non_blocking=True)
+            
             # set the parameter gradients to zero
             optimizer.zero_grad()
-            outputs = net(inputs)
+            outputs = net.forward(inputs)
             loss = criterion(outputs, labels)
+            
             # propagate the loss backward
             loss.backward()
             # update the gradients
@@ -216,12 +222,8 @@ def test(net, testloader):
     print('Accuracy of the network on test signals: %0.3f %%' % (
         100 * correct / total))
     
+    
 test(net, testloader)
-
-
-
-
-
 
 
 
