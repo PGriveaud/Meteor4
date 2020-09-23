@@ -14,8 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.utils.data import TensorDataset
-
-
+from sklearn import metrics
 import matplotlib.pyplot as plt
 plt.close('all')
 
@@ -30,44 +29,49 @@ def sine_gaussian(x, B0, f0, x0, phi0, tau0):
     return y 
 
 N_samples = 10
-Amp = np.random.uniform(0, 10, N_samples)
-Freq = np.random.uniform(0.009, 1.0, N_samples)
-Phase = np.random.uniform(0, 2*np.pi, N_samples)
+Amp1 = np.random.uniform(0, 10, N_samples)
+Amp2 = np.random.uniform(0, 10, N_samples)
+
+Freq1 = np.random.uniform(0.009, 1.0, N_samples)
+Freq2 = np.random.uniform(0.009, 1.0, N_samples)
+
+
+Phase1 = np.random.uniform(0, 2*np.pi, N_samples)
+Phase2 = np.random.uniform(0, 2*np.pi, N_samples)
+
 Tau = np.random.uniform(0.1, 10, 10)
 
 
 phi0 = 0.2
-x0 = 500
-tau0 = 300
+x0 = 25
+tau0 = 10
 
 
 L = 1000
-x = np.arange(0, L, 1)
+# x = np.arange(0, L, 1)
+x = np.linspace(0,50,L)
 
 N = 100
 
-# freq = np.arange(0.009, 1.0, 0.01)
-# amplitude = range(1,101)
-
 dataset = []
-for f0 in Freq:
-    for A0 in Amp:
-        for phi0 in Phase:
-            y = sine(x, A0, f0, x0, phi0)
+for f0 in Freq1:
+    for A0 in Amp1:
+        for phi0 in Phase1:
+            y = sine(x, A0, f0, x0, phi0) + 1
             dataset.append(y)
             
-for f0 in Freq:
-    for A0 in Amp:
-        for phi0 in Phase:
-            y = sine_gaussian(x, A0, f0, x0, phi0, tau0)
+for f0 in Freq2:
+    for A0 in Amp2:
+        for phi0 in Phase2:
+            y = sine_gaussian(x, A0, f0, x0, phi0, tau0) + 1
             dataset.append(y)
 
     
 # plt.figure()
 # plt.plot(x, dataset[0], label= 'Sine')
-# plt.plot(x, dataset[99], label= 'Sine')
+# # plt.plot(x, dataset[99], label= 'Sine')
 
-# # plt.plot(x, sine_gaussian(x), label = 'Gaussian sine')
+# plt.plot(x, dataset[-1], label = 'Gaussian sine')
 # plt.xlabel('x')
 # plt.ylabel('y(x)')
 # plt.legend()
@@ -89,7 +93,7 @@ df.insert(0, "label", labels)
 # Shuffling the data
 df = df.sample(frac=1)
 
-test_size = 100
+test_size = 50
 df_test = df.iloc[:test_size,]
 df_train = df.iloc[(test_size+1):,]
 
@@ -108,7 +112,7 @@ x_test = x_test.unsqueeze(1)
 
 
 train_set = TensorDataset(x_train, y_train)
-trainloader = DataLoader(train_set)
+trainloader = DataLoader(train_set, batch_size=100, shuffle=True)
 
 test_set = TensorDataset(x_test, y_test)
 testloader = DataLoader(test_set)
@@ -153,7 +157,7 @@ D_in =  L-1
 
 # n0 is channel on input; n1 channel out conv1; 
 # n2; channel out conv2; kern is kernel size.
-n0, n1, n2, kern = 1, 6, 16, 5
+n0, n1, n2, kern = 1, 6, 16, 5 
 
 
 net = Net1D(1, 6, 16, 5)
@@ -171,9 +175,9 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 # Loss
 criterion = torch.nn.CrossEntropyLoss()
 # Optimizer
-optimizer = torch.optim.SGD(net.parameters(), lr=1e-4)
+optimizer = torch.optim.SGD(net.parameters(), lr=1e-3)
 
-num_epochs = 10
+num_epochs = 100
 
 def train(net, trainloader):
     for epoch in range(num_epochs): # no. of epochs
@@ -194,7 +198,7 @@ def train(net, trainloader):
             optimizer.step()
  
             running_loss += loss.item()
-        if num_epochs >= 500:
+        if num_epochs >= 101:
             if epoch % 100 == 99:
                 print('[Epoch %d] loss: %.3f' %
                               (epoch + 1, running_loss/len(trainloader)))
@@ -207,8 +211,11 @@ def train(net, trainloader):
 
 train(net, trainloader)
 
+#%%
 
-    
+y_true = []
+y0_pred = []
+y1_pred = []
 def test(net, testloader):
     correct = 0
     total = 0
@@ -216,6 +223,13 @@ def test(net, testloader):
         for data in testloader:
             inputs, labels = data[0].to(device, non_blocking=True), data[1].to(device, non_blocking=True)
             outputs = net(inputs)
+            
+            # print(outputs)
+            a = outputs.numpy()
+            y0_pred.append(a[0][0])
+            y1_pred.append(a[0][1])
+            y_true.append(labels.item())
+            
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
@@ -224,6 +238,24 @@ def test(net, testloader):
     
     
 test(net, testloader)
+
+#%%
+
+roc_df = pd.DataFrame({'y_true':y_true,'y0_pred':y0_pred, 'y1_pred':y1_pred})
+
+
+fpr, tpr, thresholds = metrics.roc_curve(roc_df['y_true'], roc_df['y1_pred'])
+
+
+plt.figure()
+plt.plot(fpr, tpr, color='darkred')
+plt.plot([0, 1], [0, 1], color='navy', linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver operating characteristic')
+plt.show()
+
+
 
 
 
