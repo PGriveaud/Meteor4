@@ -115,7 +115,7 @@ train_set = TensorDataset(x_train, y_train)
 trainloader = DataLoader(train_set, batch_size=100, shuffle=True)
 
 test_set = TensorDataset(x_test, y_test)
-testloader = DataLoader(test_set)
+testloader = DataLoader(test_set, batch_size=100, shuffle=True)
 
 #%%
 
