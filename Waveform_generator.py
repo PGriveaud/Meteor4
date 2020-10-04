@@ -18,10 +18,11 @@ import h5py
 # ============================ Saving function in hdf format  =====================
 # =================================================================================
 
-def save(data, path):
+def save(datalist, data_params, path):
         with h5py.File(path, 'a') as f:
-            for i in range(len(data)):
-                data = data[i]
+            for i in range(len(datalist)):
+                data = datalist[i]
+                params = data_params[i]
                 ds = f.create_dataset(f'data_{i}', data=data)
                 ds.attrs['start_time'] = float(data.start_time)
                 ds.attrs['delta_t'] = float(data.delta_t)
@@ -34,12 +35,10 @@ def save(data, path):
 # ============================ Creation of waveforms ==============================
 # =================================================================================
 
-
-import decimal
-
-path = '/Users/pipoune/Desktop/M2/METEOR_4/'
+path = '/Users/pipoune/Desktop/M2/METEOR_4/Datasets/'
 
 datalist = []
+data_params = [] 
 def waveform_generation(masses, ra, dec):
     for m in masses:
         #Generate a waveform with a given component mass; assumed equal mass, nonspinning
@@ -54,14 +53,16 @@ def waveform_generation(masses, ra, dec):
         hp.start_time = hc.start_time = 0 # GPS seconds
         params = {'ra':ra, 'dec': dec, 'mass':m}
 
+        
         for name in ['L1', 'H1', 'V1']:
             det = Detector(name)
             det_strain = det.project_wave(hp, hc, 
                                          right_ascension, declination,
                                          polarization)
             datalist.append(det_strain)
+            data_params.append(params)
             
-    save(datalist, path + 'waveforms_test.hdf')
+    save(datalist, data_params, path + 'wavefroms_dataset_mass.hdf')
             
 ra = 1.7
 dec = 1.7
@@ -70,15 +71,3 @@ masses = np.arange(1.4, 1.7, .005)
 waveform_generation(masses, ra, dec)
 
 
-
-#%%
-# N = len(masses)*3
-# with h5py.File(path + 'waveforms_test.hdf5', 'w') as f:
-
-#           for i in range(N+1):
-#               print('i = ', i)
-
-#               d = f.create_dataset(f'wf_{i}', data=datalist)
-#               d.attrs['beta'] = dec
-#               d.attrs['lambd'] = ra
-#               d.attrs['m1'] = masses[i]
