@@ -11,37 +11,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pycbc.waveform import get_td_waveform
 from pycbc.detector import Detector
-import os as h5py
-
+import h5py
 
 
 # =================================================================================
 # ============================ Saving function in hdf format  =====================
 # =================================================================================
 
-def save(self, path, group = None):
-        """
-        Parameters
-        ----------
-        path: string
-            Destination file path. Must end with either .hdf, .npy or .txt.
-        group: string
-            Additional name for internal storage use. Ex. hdf storage uses
-            this as the key value.
-        """
-
-        key = 'data' if group is None else group
+def save(data, path):
         with h5py.File(path, 'a') as f:
-            ds = f.create_dataset(key, data=self.numpy(),
-                                  compression='gzip',
-                                  compression_opts=9, shuffle=True)
-            ds.attrs['start_time'] = float(self.start_time)
-            ds.attrs['delta_t'] = float(self.delta_t)
-            ds.attrs['ra'] = float(self.right_ascension)
-            ds.attrs['dec'] = float(self.declination)
-            ds.attrs['mass'] = float(self.m)
-            
-
+            for i in range(len(data)):
+                data = data[i]
+                ds = f.create_dataset(f'data_{i}', data=data)
+                ds.attrs['start_time'] = float(data.start_time)
+                ds.attrs['delta_t'] = float(data.delta_t)
+                ds.attrs['ra'] = float(params['ra'])
+                ds.attrs['dec'] = float(params['dec'])
+                ds.attrs['mass'] = float(params['mass'])
 
 
 # =================================================================================
@@ -51,10 +37,10 @@ def save(self, path, group = None):
 
 import decimal
 
-path = '/Users/pipoune/Desktop/M2/METEOR_4/Datasets'
+path = '/Users/pipoune/Desktop/M2/METEOR_4/'
 
+datalist = []
 def waveform_generation(masses, ra, dec):
-    m_idx = (1.4-0.005)*1000
     for m in masses:
         #Generate a waveform with a given component mass; assumed equal mass, nonspinning
         hp, hc = get_td_waveform(approximant="TaylorF2", 
@@ -66,19 +52,16 @@ def waveform_generation(masses, ra, dec):
         declination = dec
         polarization = 0
         hp.start_time = hc.start_time = 0 # GPS seconds
+        params = {'ra':ra, 'dec': dec, 'mass':m}
 
-        
-        m_idx += 0.005*1000
-        m_idx = decimal.Decimal(m_idx)
-        m_idx = int(round(m_idx,3))
-        
         for name in ['L1', 'H1', 'V1']:
             det = Detector(name)
             det_strain = det.project_wave(hp, hc, 
                                          right_ascension, declination,
                                          polarization)
-            # det_strain.save(path + f'/waveforms_{name}_{m_idx}.hdf')
+            datalist.append(det_strain)
             
+    save(datalist, path + 'waveforms_test.hdf')
             
 ra = 1.7
 dec = 1.7
@@ -86,3 +69,16 @@ masses = np.arange(1.4, 1.7, .005)
 
 waveform_generation(masses, ra, dec)
 
+
+
+#%%
+# N = len(masses)*3
+# with h5py.File(path + 'waveforms_test.hdf5', 'w') as f:
+
+#           for i in range(N+1):
+#               print('i = ', i)
+
+#               d = f.create_dataset(f'wf_{i}', data=datalist)
+#               d.attrs['beta'] = dec
+#               d.attrs['lambd'] = ra
+#               d.attrs['m1'] = masses[i]
